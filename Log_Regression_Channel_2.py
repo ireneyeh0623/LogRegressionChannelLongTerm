@@ -7,7 +7,7 @@ from datetime import datetime
 from sklearn.linear_model import LinearRegression
 
 # --- 1. 網頁配置與自定義 CSS ---
-st.set_page_config(page_title="David 長期波段股價對數回歸通道", layout="wide")
+st.set_page_config(page_title="David 長線波段股價對數回歸通道", layout="wide")
 
 # --- 2. 側邊欄：參數設定 ---
 st.sidebar.header("查詢設定")
@@ -91,7 +91,7 @@ else:
 calculate_btn = st.sidebar.button("開始計算")
 
 # --- 4. 主要標題 ---
-st.write(f"## 📈 David 長期波段股價對數回歸通道")
+st.write(f"## 📈 David 長線波段股價對數回歸通道")
 
 if not calculate_btn:
     st.info("💡 請點開左上角選單 [ >> ] 在左側面板設定參數後，按「開始計算」即可產出圖表")
