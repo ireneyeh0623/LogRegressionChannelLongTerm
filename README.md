@@ -1,0 +1,2 @@
+# LogRegressionChannelLongTerm
+David 長期波段股價對數回歸通道
