@@ -108,20 +108,43 @@ else:
         st.write(f"### {search_id}")
 
         # B. 資料處理與多層索引處理
+        # 先展平 MultiIndex 欄位 (新版 yfinance 對單一股票也可能回傳 MultiIndex)
         if isinstance(data.columns, pd.MultiIndex):
             data.columns = data.columns.get_level_values(0)
+
+        # 移除重複欄位 (MultiIndex 展平後可能出現)
+        data = data.loc[:, ~data.columns.duplicated()]
+
         df = data.reset_index()
 
+        # 相容不同版本 yfinance 的日期欄位名稱
+        # 新版 yfinance (0.2.x+) 的索引名稱可能為 'Datetime' 而非 'Date'
+        if 'Date' not in df.columns:
+            date_col_found = None
+            for col in df.columns:
+                if pd.api.types.is_datetime64_any_dtype(df[col]):
+                    date_col_found = col
+                    break
+            if date_col_found:
+                df = df.rename(columns={date_col_found: 'Date'})
+            else:
+                # 最後備援：將第一欄重新命名為 'Date'
+                df = df.rename(columns={df.columns[0]: 'Date'})
+
+        # 確保 Date 欄位為 datetime 型別
+        df['Date'] = pd.to_datetime(df['Date'])
+
         # 安全建立收盤價欄位
-        try:
-            df['Close_1D'] = df['Close']
-        except KeyError:
-            st.error("找不到收盤價欄位，請重新嘗試。")
+        # 新版 yfinance 的 Close 欄位名稱可能帶有大小寫變化
+        close_col = next((c for c in df.columns if c.lower() == 'close'), None)
+        if close_col is None:
+            st.error("找不到收盤價欄位，請檢查代號或日期。")
             st.stop()
+        df['Close_1D'] = df[close_col]
 
         # [核心] 1. 對數化股價：對收盤價取對數
         df['Log_Close'] = np.log(df['Close_1D'])
-        
+
         # 格式化日期字串 (用於 X 軸消除缺口)
         df['Date_Str'] = df['Date'].dt.strftime('%Y-%m-%d')
 
