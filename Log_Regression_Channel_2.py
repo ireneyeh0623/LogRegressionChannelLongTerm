@@ -13,7 +13,7 @@ st.set_page_config(page_title="David 長線股價對數回歸通道", layout="wi
 st.sidebar.header("查詢設定")
 
 # 股票代號
-stock_id = st.sidebar.text_input("股票代號(如2330.TW或AAPL)", "2330.TW")
+stock_id = st.sidebar.text_input("股票代號(如2330.TW或AAPL)", "2330")
 
 # 日期選擇
 start_date = st.sidebar.date_input("起始日期", datetime(2015, 8, 1))
@@ -96,10 +96,19 @@ st.write(f"## 📈 David 長線股價對數回歸通道")
 if not calculate_btn:
     st.info("💡 請點開左上角選單 [ >> ] 在左側面板設定參數後，按「開始計算」即可產出圖表")
 else:
-    # A. 下載資料
-    search_id = f"{stock_id}.TW" if stock_id.isdigit() else stock_id
-    data = yf.download(search_id, start=start_date, end=end_date, auto_adjust=True)
-    
+    # A. 下載資料（自動依序嘗試原始代號、.TW、.TWO）
+    raw_id = stock_id.strip()
+    candidates = [raw_id, f"{raw_id}.TW", f"{raw_id}.TWO"] if '.' not in raw_id else [raw_id]
+
+    data = pd.DataFrame()
+    search_id = raw_id
+    for candidate in candidates:
+        fetched = yf.download(candidate, start=start_date, end=end_date, auto_adjust=True, progress=False)
+        if not fetched.empty:
+            data = fetched
+            search_id = candidate
+            break
+
     if not data.empty:
         # 取得公司名稱
         # ticker_info = yf.Ticker(search_id) #先拿掉避免觸發YFRateLimitError
@@ -241,4 +250,4 @@ else:
         col4.metric("對數離差 SD", f"{sd_val:.4f}")
         
     else:
-        st.error("找不到股票資料，請檢查代號或日期。")
+        st.error(f"找不到股票資料（已嘗試：{', '.join(candidates)}），請檢查代號或日期。")
