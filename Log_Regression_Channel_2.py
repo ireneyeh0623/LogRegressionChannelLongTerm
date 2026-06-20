@@ -13,7 +13,7 @@ st.set_page_config(page_title="David 長線股價對數回歸通道", layout="wi
 st.sidebar.header("查詢設定")
 
 # 股票代號
-stock_id = st.sidebar.text_input("股票代號(如2330.TW或AAPL)", "2330")
+stock_id = st.sidebar.text_input("股票代號(如2330或AAPL)", "2330")
 
 # 日期選擇
 start_date = st.sidebar.date_input("起始日期", datetime(2015, 8, 1))
