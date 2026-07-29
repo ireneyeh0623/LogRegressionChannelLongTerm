@@ -6,95 +6,204 @@ import plotly.graph_objects as go
 from datetime import datetime
 from sklearn.linear_model import LinearRegression
 
-# --- 1. 網頁配置與自定義 CSS ---
+# ==============================================================================
+# 1. 系統環境配置
+# ==============================================================================
+
 st.set_page_config(page_title="David 長線股價對數回歸通道", layout="wide")
 
-# --- 2. 側邊欄：參數設定 ---
-st.sidebar.header("查詢設定")
+if "is_dark" not in st.session_state:
+    st.session_state.is_dark = False
 
-# 股票代號
+# ==============================================================================
+# 2. 視覺設計 Tokens（依 Design Handoff「Classical」設計系統規格）
+# ==============================================================================
+
+LIGHT_TOKENS = {
+    "bg": "#f3f2f2",
+    "surface_alt": "#f8f7f6",
+    "text": "#201f1d",
+    "text_muted": "rgba(32,31,29,0.55)",
+    "divider": "rgba(32,31,29,0.16)",
+    "accent": "#b68235",
+    "grid_line": "rgba(32,31,29,0.08)",
+    "shadow": "0 3px 10px rgba(45,43,43,0.14)",
+    "lines": {
+        "close": "#1a3a6b", "extreme_bull": "#8b1e1e", "bull": "#e2726b",
+        "trend": "#d4a017", "bear": "#7fb88f", "extreme_bear": "#1f5c3d",
+    },
+}
+DARK_TOKENS = {
+    "bg": "#17140f",
+    "surface_alt": "#1c1912",
+    "text": "#f3ede2",
+    "text_muted": "rgba(243,237,226,0.6)",
+    "divider": "rgba(243,237,226,0.16)",
+    "accent": "#c99a4e",
+    "grid_line": "rgba(243,237,226,0.12)",
+    "shadow": "0 12px 32px rgba(0,0,0,0.5)",
+    "lines": {
+        "close": "#5b9bf0", "extreme_bull": "#d0342c", "bull": "#f0918a",
+        "trend": "#e6b325", "bear": "#8fd6a3", "extreme_bear": "#2f9d68",
+    },
+}
+
+is_dark = st.session_state.is_dark
+tok = DARK_TOKENS if is_dark else LIGHT_TOKENS
+chart_template = "plotly_dark" if is_dark else "plotly_white"
+
+# ==============================================================================
+# 3. 全域樣式（字型／配色／按鈕／輸入框／側邊欄版面）
+# ==============================================================================
+
+st.markdown(f"""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=Lora:wght@400;600&display=swap');
+
+    html, body, [class*="css"] {{ font-family: 'Lora', serif; }}
+    h1, h2, h3, h4, h5, h6 {{
+        font-family: 'Cormorant Garamond', serif !important;
+        font-weight: 600 !important;
+    }}
+
+    .stApp, [data-testid="stAppViewContainer"] {{
+        background-color: {tok['bg']} !important;
+        color: {tok['text']} !important;
+    }}
+    [data-testid="stHeader"] {{ background-color: transparent !important; }}
+
+    /* 側邊欄版面 */
+    [data-testid="stSidebar"] {{
+        background-color: {tok['bg']} !important;
+        border-right: 1px solid {tok['divider']};
+        min-width: 300px !important;
+        max-width: 300px !important;
+    }}
+    [data-testid="stSidebarUserContent"] {{ padding: 40px 28px !important; }}
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{ gap: 18px; }}
+    [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {{
+        font-size: 12px !important;
+        color: {tok['text_muted']} !important;
+        font-family: 'Lora', serif !important;
+    }}
+
+    /* 輸入框：邊框只畫在最外層容器，內層元素一律去邊框/去底色，避免雙層邊框與底色不一致 */
+    [data-testid="stSidebar"] div[data-baseweb="input"] {{
+        border: 1px solid {tok['divider']} !important;
+        border-radius: 4px !important;
+        background-color: transparent !important;
+        box-shadow: none !important;
+    }}
+    [data-testid="stSidebar"] div[data-baseweb="input"] * {{
+        border: none !important;
+        box-shadow: none !important;
+        background-color: transparent !important;
+    }}
+    [data-testid="stSidebar"] div[data-baseweb="input"] input {{
+        color: {tok['text']} !important;
+    }}
+
+    /* 瀏覽器自動填入(autofill)會強制套用自己的底色，一般CSS蓋不掉，需用此專門技巧解除 */
+    [data-testid="stSidebar"] input:-webkit-autofill,
+    [data-testid="stSidebar"] input:-webkit-autofill:hover,
+    [data-testid="stSidebar"] input:-webkit-autofill:focus,
+    [data-testid="stSidebar"] input:-webkit-autofill:active {{
+        -webkit-box-shadow: 0 0 0 1000px transparent inset !important;
+        -webkit-text-fill-color: {tok['text']} !important;
+        caret-color: {tok['text']};
+        transition: background-color 9999s ease-in-out 0s;
+    }}
+
+    /* 按鈕：設計系統一律採 outline 樣式，不使用實心填色 */
+    div.stButton > button {{
+        width: 100%;
+        background-color: transparent !important;
+        border-radius: 4px !important;
+        font-family: 'Cormorant Garamond', serif !important;
+        font-weight: 600 !important;
+        font-size: 15px !important;
+        box-shadow: none !important;
+    }}
+    div.stButton > button[kind="secondary"] {{
+        color: {tok['text']} !important;
+        border: 1px solid {tok['divider']} !important;
+    }}
+    div.stButton > button[kind="secondary"]:hover {{
+        border-color: {tok['accent']} !important;
+        color: {tok['accent']} !important;
+    }}
+    div.stButton > button[kind="primary"] {{
+        color: {tok['accent']} !important;
+        border: 1px solid {tok['accent']} !important;
+    }}
+    div.stButton > button[kind="primary"]:hover {{
+        background-color: color-mix(in srgb, {tok['accent']} 12%, transparent) !important;
+    }}
+
+    /* 圖表卡片容器（st.container(border=True)） */
+    [data-testid="stVerticalBlockBorderWrapper"] {{
+        border: 1px solid {tok['divider']} !important;
+        border-radius: 7px !important;
+        background-color: {tok['surface_alt']} !important;
+        box-shadow: {tok['shadow']};
+    }}
+    </style>
+    """, unsafe_allow_html=True)
+
+# ==============================================================================
+# 4. 側邊欄：使用者參數輸入區
+# ==============================================================================
+
+st.sidebar.markdown(
+    f"<div style='font-size:12px;letter-spacing:.08em;text-transform:uppercase;"
+    f"color:{tok['text_muted']};margin-bottom:-6px;'>查詢設定</div>",
+    unsafe_allow_html=True,
+)
+
+# 股票代號輸入
 stock_id = st.sidebar.text_input("股票代號(如2330或AAPL)", "2330")
+# 日期範圍選擇：設定資料擷取的起始與結束時間
+start_date = st.sidebar.date_input("起始日期(YYYY/MM/DD)", datetime(2015, 8, 1))
+end_date = st.sidebar.date_input("結束日期(YYYY/MM/DD)", datetime.now())
 
-# 日期選擇
-start_date = st.sidebar.date_input("起始日期", datetime(2015, 8, 1))
-end_date = st.sidebar.date_input("結束日期", datetime.now())
+st.sidebar.markdown(
+    f"<hr style='border:none;border-top:1px solid {tok['divider']};margin:4px 0;'>",
+    unsafe_allow_html=True,
+)
 
-# 圖表主題選擇
-theme_choice = st.sidebar.radio("圖表主題(對應網頁背景)", ["亮色(白色背景)", "深色(深色背景)"])
+# 視覺主題切換：以按鈕切換整頁亮/深色（對應網頁背景）
+theme_label = "切換為深色" if not is_dark else "切換為亮色"
+theme_icon = ":material/dark_mode:" if not is_dark else ":material/light_mode:"
+theme_clicked = st.sidebar.button(theme_label, icon=theme_icon, type="secondary", use_container_width=True)
 
-# --- 3. 強制背景色與字體加深邏輯 (CSS) ---
-if theme_choice == "深色(深色背景)":
-    chart_template = "plotly_dark"
-    font_color = "white"
-    bg_color = "#0E1117"
-    st.markdown("""
-        <style>
-        /* 強制側邊欄、主背景、文字顏色為深色 */
-        [data-testid="stSidebar"], .stApp, header { background-color: #0E1117 !important; color: white !important; }
-        .stMarkdown, p, h1, h2, h3, span { color: white !important; }
-        /* 調整輸入框文字顏色 */
-        input { color: white !important; background-color: #262730 !important; }
-        </style>
-        """, unsafe_allow_html=True)
-else:
-    chart_template = "plotly_white"
-    font_color = "#000000" # 加深為純黑
-    bg_color = "#FFFFFF"
-    st.markdown("""
-        <style>
-        /* 1. 強制背景與文字顏色 */
-        [data-testid="stSidebar"], .stApp, header { 
-            background-color: #FFFFFF !important; 
-            color: black !important; 
-        }
-        .stMarkdown, p, h1, h2, h3, span { color: black !important; }
-        
-        /* 2. 徹底消除輸入框右側的陰影與淡淡格線 */
-        div[data-baseweb="input"], 
-        div[data-baseweb="input"] > div,
-        div[data-baseweb="input"] input {
-            background-color: white !important;
-            border-color: #dcdcdc !important; /* 設定一個淺灰色的統一邊框 */
-            box-shadow: none !important;      /* 移除所有陰影 */
-        }
-        
-        /* 針對日期選取器內部的特殊容器進行修正 */
-        div[role="combobox"] {
-            background-color: white !important;
-            border: none !important;
-        }
+# 開始計算觸發按鈕
+calculate_btn = st.sidebar.button("開始計算", type="primary", use_container_width=True)
 
-        /* 3. 強制按鈕內部的所有文字元素變白 */
-        div.stButton > button {
-            background-color: #000000 !important;
-            border: 1px solid #000000 !important;
-            font-weight: bold !important;
-        }
-        div.stButton > button * {
-            color: #FFFFFF !important;
-        }
-        
-        div.stButton > button:hover {
-            background-color: #333333 !important;
-        }
+if theme_clicked:
+    st.session_state.is_dark = not st.session_state.is_dark
+    st.rerun()
 
-        /* 4. 側邊欄與輸入框整體調整 */
-        [data-testid="stSidebar"] { border-right: 1px solid #f0f2f6; }
-        input { 
-            color: black !important; 
-            background-color: white !important; 
-        }
-        </style>
-        """, unsafe_allow_html=True)
+# ==============================================================================
+# 5. 主程式執行邏輯
+# ==============================================================================
 
-# 定義開始計算按鈕
-calculate_btn = st.sidebar.button("開始計算")
+st.markdown(f"""
+    <div style="display:flex;align-items:center;gap:12px;">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="{tok['accent']}" stroke-width="1.6">
+        <path d="M3 17l5-6 4 3 6-9"/><path d="M14 5h5v5"/>
+      </svg>
+      <h1 style="margin:0;font-size:36px;">David 長線股價對數回歸通道</h1>
+    </div>
+    """, unsafe_allow_html=True)
 
-# --- 4. 主要標題 ---
-st.write(f"## 📈 David 長線股價對數回歸通道")
-
+# 判斷邏輯：如果按鈕「還沒被按下」
 if not calculate_btn:
-    st.info("💡 請點開左上角選單 [ >> ] 在左側面板設定參數後，按「開始計算」即可產出圖表")
+    st.markdown(
+        f"<div style='color:{tok['text_muted']};font-size:15px;margin-top:12px;'>"
+        f"請點開左上角選單 [ >> ] 在左側面板設定參數後，按「開始計算」即可產出圖表</div>",
+        unsafe_allow_html=True,
+    )
+# 判斷邏輯：按下按鈕後才執行抓取資料的動作
 else:
     # A. 下載資料（自動依序嘗試原始代號、.TW、.TWO）
     raw_id = stock_id.strip()
@@ -109,13 +218,14 @@ else:
             search_id = candidate
             break
 
-    if not data.empty:
-        # 取得公司名稱
-        # ticker_info = yf.Ticker(search_id) #先拿掉避免觸發YFRateLimitError
-        # long_name = ticker_info.info.get('longName', search_id) #先拿掉避免觸發YFRateLimitError
-        # st.write(f"### {search_id} - {long_name}") #先拿掉避免觸發YFRateLimitError
-        st.write(f"### {search_id}")
+    # 顯示最終使用的股票代碼
+    st.markdown(
+        f"<div style='margin-top:4px;font-family:\"Cormorant Garamond\",serif;"
+        f"font-size:19px;color:{tok['text_muted']};'>{search_id}</div>",
+        unsafe_allow_html=True,
+    )
 
+    if not data.empty:
         # B. 資料處理與多層索引處理
         # 先展平 MultiIndex 欄位 (新版 yfinance 對單一股票也可能回傳 MultiIndex)
         if isinstance(data.columns, pd.MultiIndex):
@@ -160,12 +270,12 @@ else:
         # [核心] 2. 線性回歸計算 (針對對數化股價)
         X = np.array(df.index).reshape(-1, 1)
         Y = df['Log_Close'].values.reshape(-1, 1)
-        
+
         # 排除 NaN 進行回歸訓練
         mask = ~np.isnan(Y).flatten()
         model = LinearRegression()
         model.fit(X[mask], Y[mask])
-        
+
         # 預測對數回歸值 (中心線)
         df['Log_Reg'] = model.predict(X)
 
@@ -180,74 +290,91 @@ else:
         df['Log_M1SD'] = df['Log_Reg'] - sd_val
         df['Log_M2SD'] = df['Log_Reg'] - (2 * sd_val)
 
-        # C. 繪圖：使用 Plotly
+        # C. 視覺化繪圖 (Plotly 互動式圖表)
         fig = go.Figure()
+        lines = tok['lines']
 
-        # 軌道線繪製 (對數化數據)
-        fig.add_trace(go.Scatter(x=df['Date_Str'], y=df['Log_Close'], name='對數化股價', line=dict(color='#17BECF', width=2)))
-        fig.add_trace(go.Scatter(x=df['Date_Str'], y=df['Log_Reg'], name='回歸中線', line=dict(color='orange', dash='dash')))
-        fig.add_trace(go.Scatter(x=df['Date_Str'], y=df['Log_P2SD'], name='+2SD 極端樂觀', line=dict(color='red', width=1, dash='dot')))
-        fig.add_trace(go.Scatter(x=df['Date_Str'], y=df['Log_P1SD'], name='+1SD 樂觀', line=dict(color='pink', width=1, dash='dot')))
-        fig.add_trace(go.Scatter(x=df['Date_Str'], y=df['Log_M1SD'], name='-1SD 悲觀', line=dict(color='lightgreen', width=1, dash='dot')))
-        fig.add_trace(go.Scatter(x=df['Date_Str'], y=df['Log_M2SD'], name='-2SD 極端悲觀', line=dict(color='green', width=1, dash='dot')))
+        fig.add_trace(go.Scatter(x=df['Date_Str'], y=df['Log_Close'], name='對數化股價',
+                                 line=dict(color=lines['close'], width=2)))
 
-        # D. 圖表佈局設定 (強制加深字體、消除格線)
+        # 定義各軌道線的顏色與名稱（依 Design Handoff 配色 tokens）
+        band_specs = [
+            ('Log_P2SD', '+2SD 極端樂觀', lines['extreme_bull']),
+            ('Log_P1SD', '+1SD 樂觀', lines['bull']),
+            ('Log_Reg', '回歸中線', lines['trend']),
+            ('Log_M1SD', '-1SD 悲觀', lines['bear']),
+            ('Log_M2SD', '-2SD 極端悲觀', lines['extreme_bear']),
+        ]
+
+        for band, name, color in band_specs:
+            # 回歸中線使用實線，其餘 SD 軌道使用虛線以利區分
+            is_trend = (band == 'Log_Reg')
+            fig.add_trace(go.Scatter(x=df['Date_Str'], y=df[band], name=name,
+                                     line=dict(dash='solid' if is_trend else 'dash',
+                                               color=color, width=2 if is_trend else 1.6)))
+
+        # 圖表版面優化
         fig.update_layout(
             height=650,
             template=chart_template,
-            hovermode="x unified",
-            paper_bgcolor=bg_color,
-            plot_bgcolor=bg_color,
-            # 1. 全域字體設定：強制設為 font_color (純黑) 並放大
-            font=dict(color=font_color, size=14), 
-            
-            # 2. 強制指定圖例文字顏色與大小
-            legend_font_color=font_color,
-            legend_font_size=14,
-            
-            xaxis=dict(
-                type='category', 
-                color=font_color, 
-                tickfont=dict(color=font_color, size=12),
-                nticks=10,
-                showgrid=False, 
-                zeroline=False
-            ),
-            
-            yaxis=dict(
-                color=font_color, 
-                tickfont=dict(color=font_color, size=12),
-                title=dict(text="對數化股價 Log(Price)", font=dict(color=font_color, size=14)),
-                showgrid=False, 
-                zeroline=False
-            ),
-            
-            # 3. 圖例詳細設定
-            legend=dict(
-                orientation="h", 
-                yanchor="bottom", 
-                y=1.02, 
-                xanchor="center", 
-                x=0.5,
-                # 這裡再次強制指定顏色，並增加邊框讓它更明顯
-                font=dict(color=font_color, size=14),
-                bordercolor=font_color, # 增加一個淡淡的邊框有助於視覺識別
-                borderwidth=0,
-                itemsizing='constant' # 讓圖示大小固定，不會變細
-            )
+            hovermode='x unified',  # 統一滑鼠懸停資訊
+            paper_bgcolor=tok['surface_alt'],
+            plot_bgcolor=tok['surface_alt'],
+            font=dict(color=tok['text'], family='Lora, serif'),
+            xaxis=dict(type='category', color=tok['text'], tickfont=dict(color=tok['text']),
+                       gridcolor=tok['grid_line'], nticks=10,
+                       zeroline=True, zerolinecolor=tok['grid_line'], zerolinewidth=1),
+            yaxis=dict(color=tok['text'], tickfont=dict(color=tok['text']), gridcolor=tok['grid_line'],
+                       title=dict(text="對數化股價 Log(Price)", font=dict(color=tok['text'])),
+                       zeroline=True, zerolinecolor=tok['grid_line'], zerolinewidth=1),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5,
+                        font=dict(color=tok['text_muted'], family='Lora, serif'))
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        with st.container(border=True):
+            st.plotly_chart(fig, use_container_width=True)
 
-        # E. 數據摘要區
-        st.header("📊 最後交易日數據摘要")
+        # D. 數據摘要與投資評語
+        st.markdown("<h4 style='margin:28px 0 16px;'>最後交易日數據摘要</h4>", unsafe_allow_html=True)
+
         last_row = df.iloc[-1]
-        
+        # 計算目前對數離差落在幾倍標準差位置 ($\sigma$ 值)
+        sigma = last_row['Deviation'] / sd_val
+
+        def _stat_card(label, value):
+            return f"""
+            <div style="border:1px solid {tok['divider']};border-radius:4px;padding:20px 22px;">
+              <div style="font-size:12px;color:{tok['text_muted']};margin-bottom:8px;">{label}</div>
+              <div style="font-family:'Cormorant Garamond',serif;font-size:28px;font-variant-numeric:tabular-nums;">{value}</div>
+            </div>
+            """
+
+        # 儀表板數值呈現
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric("原始收盤價", f"{last_row['Close_1D']:.2f}")
-        col2.metric("對數化股價", f"{last_row['Log_Close']:.4f}")
-        col3.metric("對數回歸值", f"{last_row['Log_Reg']:.4f}")
-        col4.metric("對數離差 SD", f"{sd_val:.4f}")
-        
+        col1.markdown(_stat_card("原始收盤價", f"{last_row['Close_1D']:.2f}"), unsafe_allow_html=True)
+        col2.markdown(_stat_card("對數化股價", f"{last_row['Log_Close']:.4f}"), unsafe_allow_html=True)
+        col3.markdown(_stat_card("對數回歸值", f"{last_row['Log_Reg']:.4f}"), unsafe_allow_html=True)
+        col4.markdown(_stat_card("對數離差 SD", f"{sigma:.2f} σ"), unsafe_allow_html=True)
+
+        # 根據 $\sigma$ (Sigma) 值給予自動化投資評註
+        if sigma > 2:
+            banner_text = f"目前價格極度高估（高於回歸中線 {sigma:.2f} 個標準差）"
+        elif sigma < -2:
+            banner_text = f"目前價格極度低估（低於回歸中線 {abs(sigma):.2f} 個標準差）"
+        else:
+            banner_text = "目前價格處於合理回歸區間內"
+
+        st.markdown(f"""
+            <div style="display:flex;align-items:center;gap:12px;margin-top:20px;
+                        border:1px solid color-mix(in srgb, {tok['accent']} 40%, transparent);
+                        background:color-mix(in srgb, {tok['accent']} 10%, transparent);
+                        border-radius:4px;padding:16px 20px;">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="{tok['accent']}"
+                   stroke-width="1.8" style="flex-shrink:0">
+                <path d="M9 18h6M10 21h4M12 3a6 6 0 00-3.6 10.8c.5.4.8 1 .8 1.7v.5h5.6v-.5c0-.7.3-1.3.8-1.7A6 6 0 0012 3z"/>
+              </svg>
+              <span style="font-size:14px;">{banner_text}</span>
+            </div>
+            """, unsafe_allow_html=True)
     else:
         st.error(f"找不到股票資料（已嘗試：{', '.join(candidates)}），請檢查代號或日期。")
